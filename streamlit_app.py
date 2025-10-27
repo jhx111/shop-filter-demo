@@ -27,7 +27,8 @@ def initialize_session_state():
         'show_no_results': False,
         'product_detail_slide': 0,
         'last_price_check': time.time(),
-        'set_expression': ''
+        'set_expression': '',
+        'recommend_products': [],  # 无结果时的推荐商品
     }
 
     for key, value in defaults.items():
@@ -1689,8 +1690,6 @@ def apply_filters():
 
     # 生成集合表达式
     generate_set_expression()
-
-
 def generate_set_expression():
     """生成集合运算表达式"""
     expressions = []
@@ -1765,6 +1764,27 @@ def check_recent_view_price_drop():
     last['view_price'] = new_price
     return True
 
+
+def show_set_expression():
+    """显示集合运算表达式"""
+    if st.session_state.set_expression:
+        st.markdown("### 🧮 集合运算表达式")
+        expression_html = st.session_state.set_expression.replace('\n', '<br>')
+        st.markdown(f"""
+        <div class="set-expression">
+            {expression_html}
+        </div>
+        """, unsafe_allow_html=True)
+
+def show_all_products():
+    """显示所有商品集合"""
+    with st.expander("📦 原始商品集合（点击展开）"):
+        st.markdown("**S = {**")
+        for product in products:
+            shipping = "包邮" if product['free_shipping'] else "不包邮"
+            st.markdown(f"- {product['name']}（{product['category']}，{product['price']}元，{shipping}）")
+        st.markdown("**}**")
+
 # 将下面的 home_page() 函数整个替换掉原来的即可
 def home_page():
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
@@ -1795,7 +1815,8 @@ def home_page():
     st.markdown("### 🎯 热门推荐")
     create_carousel()
 
-
+    # 显示原始商品集合
+    show_all_products()
 
     # 搜索和筛选
     st.markdown("### 🔍 商品筛选")
@@ -1863,7 +1884,8 @@ def home_page():
     if current_filters:
         st.info("当前筛选条件: " + " | ".join(current_filters))
 
-
+        # 显示集合运算表达式
+        show_set_expression()
 
 
     # 结果展示
@@ -1875,10 +1897,19 @@ def home_page():
             <p>请尝试调整筛选条件，或者看看下面的推荐商品：</p>
         </div>
         """, unsafe_allow_html=True)
-        filtered_products = random.sample(products, min(3, len(products)))
+        # 只生成一次推荐，避免反复随机
+        if not st.session_state.recommend_products:
+            st.session_state.recommend_products = random.sample(products, min(3, len(products)))
+        display_products = st.session_state.recommend_products
+    else:
+        display_products = filtered_products
 
     # 商品网格
-    st.markdown(f"### 🛍️ 筛选结果 ({len(filtered_products)} 个商品)")
+    if st.session_state.show_no_results:
+        st.markdown("### 🔍 其他推荐商品")
+    else:
+        st.markdown(f"### 🛍️ 筛选结果 ({len(filtered_products)} 个商品)")
+
     if filtered_products:
         cols = st.columns(3)
         for idx, product in enumerate(filtered_products):
@@ -1899,7 +1930,10 @@ def home_page():
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
-                if st.button("查看详情", key=f"btn_{product['id']}", use_container_width=True):
+                btn_key = f"btn_rec_{product['id']}" if st.session_state.show_no_results else f"btn_{product['id']}"
+                if st.button("查看详情", key=btn_key, use_container_width=True):
+                    # 清空推荐列表，防止返回后再随机
+                    st.session_state.recommend_products = []
                     st.session_state.selected_product = product
                     st.session_state.current_page = 'detail'
                     st.session_state.product_detail_slide = 0
@@ -1944,6 +1978,7 @@ def main():
     # 初始化筛选结果
     if not st.session_state.filtered_products:
         st.session_state.filtered_products = products
+
 
 
 
